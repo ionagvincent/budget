@@ -20,24 +20,24 @@ object SplitwiseFormats {
 
   implicit val dateReads: Reads[DateTime] = Reads.jodaDateReads("yyyy-MM-dd'T'HH:mm:ssZ")
 
-  case class UserDetails(id: Double)
+  case class UserDetails(id: Long)
 
   case class Category(
-                       id: Double,
+                       id: Long,
                        name: String
                      )
 
   case class User(
                    user: UserDetails,
-                   user_id: Double,
+                   user_id: Long,
                    paid_share: Option[BigDecimal],
                    owed_share: Option[BigDecimal],
                    net_balance: BigDecimal
                   )
 
   case class Expense(
-                      id: Double,
-                      group_id: Option[Double],
+                      id: Long,
+                      group_id: Option[Long],
                       description: String,
                       creation_method: Option[String],
                       cost: BigDecimal,
@@ -55,8 +55,8 @@ object SplitwiseFormats {
   implicit val categoryFormat: Format[Category] = Json.format[Category]
   implicit val usersFormat: Format[User] = Json.format[User]
   implicit val expenseFormat: Reads[Expense] = (
-    (__ \ "id").read[Double] and
-    (__ \ "group_id").readNullable[Double] and
+    (__ \ "id").read[Long] and
+    (__ \ "group_id").readNullable[Long] and
     (__ \ "description").read[String] and
     (__ \ "creation_method").readNullable[String] and
     (__ \ "cost").read[BigDecimal] and
@@ -80,13 +80,15 @@ class Splitwise(person: String) {
   val consumer = new CommonsHttpOAuthConsumer(Config.Splitwise.consumerKey, Config.Splitwise.consumerSecret)
   consumer.setTokenWithSecret(Config.Splitwise.People.accessToken(person), Config.Splitwise.People.accessSecret(person))
 
+  val userId = Config.Splitwise.People.userId(person)
+
   def constructUrl(path: String, query: Seq[(String, String)] = Seq.empty): String = {
     s"${Config.Splitwise.baseUri}$path?${query.map(q => s"${q._1}=${q._2}").mkString("&")}"
   }
 
   val httpClient: CloseableHttpClient = HttpClientBuilder.create().build()
 
-  def expenses: Either[SplitwiseError, Seq[Expense]] = {
+  def expenses: Either[SplitwiseError, Seq[model.Expense]] = {
     val url = constructUrl("get_expenses", Seq("limit" -> "0"))
     val request = new HttpGet(url)
 
@@ -97,11 +99,15 @@ class Splitwise(person: String) {
       case Success(r) => r.getStatusLine.getStatusCode match {
         case 200 => {
           val body = scala.io.Source.fromInputStream(r.getEntity.getContent).getLines().mkString("")
-          println(body)
           (Json.parse(body) \ "expenses").toEither match {
             case Right(json) => json.validate[Seq[Expense]] match {
               case JsSuccess(expenses, _) => {
-
+                Right(expenses.filter(_.deleted_by.isEmpty).filter(!_.creation_method.contains("debt_consolidation", "payment")).map(
+                  e => {
+                    val owedShare: BigDecimal = e.users.find(_.user_id == userId).flatMap(_.owed_share).getOrElse(0)
+                    model.Expense(e.id, e.group_id, e.description.trim, owedShare, e.currency_code, e.category.name, e.date)
+                  }
+                ))
               }
               case JsError(e) => Left(SplitwiseJsonParsingError(e))
             }

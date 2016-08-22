@@ -25,6 +25,8 @@ object Config {
       def accessToken(person: String): String = peopleConfig.getString(s"$person.accessToken")
 
       def accessSecret(person: String): String = peopleConfig.getString(s"$person.accessSecret")
+
+      def userId(person: String): Long = peopleConfig.getLong(s"$person.userId")
     }
   }
 
