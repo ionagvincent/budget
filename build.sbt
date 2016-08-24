@@ -10,7 +10,7 @@ libraryDependencies ++= Seq(
   jdbc,
   cache,
   ws,
-  "org.apache.httpcomponents" % "httpclient" % "4.5.2",
+  "org.apache.httpcomponents" % "httpasyncclient" % "4.1.2",
   "org.apache.httpcomponents" % "httpcore" % "4.4.5",
   "oauth.signpost" % "signpost-core" % "1.2.1.2",
   "oauth.signpost" % "signpost-commonshttp4" % "1.2.1.2",

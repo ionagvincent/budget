@@ -1,17 +1,12 @@
 package services
 
-import akka.actor.Status.Failure
 import configuration.Config
 import model._
 import oauth.signpost.commonshttp.CommonsHttpOAuthConsumer
 import org.apache.http.client.methods.HttpGet
-import org.apache.http.impl.client.CloseableHttpClient
-import org.apache.http.impl.client.HttpClientBuilder
 import org.joda.time.DateTime
-import play.api.libs.json._
-import services.SplitwiseFormats.Expense
 
-import scala.util.{Success, Try}
+import scala.concurrent.{ExecutionContext, Future}
 
 object SplitwiseFormats {
 
@@ -51,11 +46,14 @@ object SplitwiseFormats {
                       payment: Boolean,
                       users: List[User]
                     )
+  case class Expenses(
+                     expenses: Seq[Expense]
+                    )
 
-  implicit val createdByFormat: Format[UserDetails] = Json.format[UserDetails]
-  implicit val categoryFormat: Format[Category] = Json.format[Category]
-  implicit val usersFormat: Format[User] = Json.format[User]
-  implicit val expenseFormat: Reads[Expense] = (
+  implicit val createdByFormat: Format[SplitwiseFormats.UserDetails] = Json.format[UserDetails]
+  implicit val categoryFormat: Format[SplitwiseFormats.Category] = Json.format[Category]
+  implicit val usersFormat: Format[SplitwiseFormats.User] = Json.format[User]
+  implicit val expenseFormat: Reads[SplitwiseFormats.Expense] = (
     (__ \ "id").read[Long] and
     (__ \ "group_id").readNullable[Long] and
     (__ \ "description").read[String] and
@@ -71,9 +69,13 @@ object SplitwiseFormats {
     (__ \ "payment").read[Boolean] and
     (__ \ "users").read[List[User]]
   )(Expense)
+  implicit def readExpenses: Reads[SplitwiseFormats.Expenses] = new Reads[SplitwiseFormats.Expenses] {
+    def reads(in: JsValue) = {
+      (in \ "expenses").validate[Seq[SplitwiseFormats.Expense]].map(expenses => Expenses(expenses))
+    }
+  }
 
 }
-
 
 class Splitwise(person: String) {
 
@@ -88,46 +90,28 @@ class Splitwise(person: String) {
     s"${Config.Splitwise.baseUri}$path?${query.map(q => s"${q._1}=${q._2}").mkString("&")}"
   }
 
-  val httpClient: CloseableHttpClient = HttpClientBuilder.create().build()
+  def owedShare(e: Expense): BigDecimal = e.users.find(_.user_id == userId).flatMap(_.owed_share).getOrElse(0)
 
-  def expenses: Either[SplitwiseError, Seq[model.Expense]] = {
+  def isValidExpense(e: Expense): Boolean = e.deleted_by.isEmpty && !e.payment && owedShare(e) > 0
+
+  def simplifyExpense(e: Expense): model.Expense = model.Expense(
+    e.id,
+    e.group_id,
+    e.description.trim,
+    owedShare(e),
+    e.currency_code,
+    e.category.name,
+    e.date
+  )
+
+  def expenses(implicit ec: ExecutionContext): Future[Either[Error, Seq[model.Expense]]] = {
     val url = constructUrl("get_expenses", Seq("limit" -> "0"))
     val request = new HttpGet(url)
-
     consumer.sign(request)
-    val response = Try(httpClient.execute(request))
 
-    def owedShare(e: Expense): BigDecimal = e.users.find(_.user_id == userId).flatMap(_.owed_share).getOrElse(0)
-
-    def isValidExpense(e: Expense): Boolean = e.deleted_by.isEmpty && !e.payment && owedShare(e) > 0
-
-    def simplifyExpense(e: Expense): model.Expense = model.Expense(
-      e.id,
-      e.group_id,
-      e.description.trim,
-      owedShare(e),
-      e.currency_code,
-      e.category.name,
-      e.date
-    )
-
-    response match {
-      case Success(r) => r.getStatusLine.getStatusCode match {
-        case 200 => {
-          val body = scala.io.Source.fromInputStream(r.getEntity.getContent).getLines().mkString("")
-          (Json.parse(body) \ "expenses").toEither match {
-            case Right(json) => json.validate[Seq[Expense]] match {
-              case JsSuccess(expenses, _) => {
-                Right(expenses.filter(isValidExpense).map(e => simplifyExpense(e)))
-              }
-              case JsError(e) => Left(SplitwiseJsonParsingError(e))
-            }
-            case Left(e) => Left(SplitwiseRequestTransportError(""))
-          }
-        }
-        case sc => Left(SplitwiseRequestError(sc))
-      }
-      case e => Left(SplitwiseRequestTransportError(""))
+    AsyncHttpClient.json[Expenses](request).map {
+      case Right(e) => Right(e.expenses.filter(isValidExpense).map(e => simplifyExpense(e)))
+      case Left(error) => Left(error)
     }
   }
 

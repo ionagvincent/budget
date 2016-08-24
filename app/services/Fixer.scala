@@ -1,17 +1,11 @@
 package services
 
-import akka.actor.Status.Failure
 import configuration.Config
 import model._
-import oauth.signpost.commonshttp.CommonsHttpOAuthConsumer
 import org.apache.http.client.methods.HttpGet
-import org.apache.http.impl.client.CloseableHttpClient
-import org.apache.http.impl.client.HttpClientBuilder
 import org.joda.time.{DateTime, LocalDate}
-import play.api.libs.json._
-import services.SplitwiseFormats.{Expense, UserDetails}
 
-import scala.util.{Success, Try}
+import scala.concurrent.{ExecutionContext, Future}
 
 object FixerFormats {
 
@@ -46,30 +40,13 @@ object Fixer {
 
   def constructUrl(date: LocalDate): String = {
     val dateString = date.toString("YYYY-MM-DD")
-    s"${Config.Fixer.baseUri}${dateString}"
+    s"${Config.Fixer.baseUri}$dateString"
   }
-  val httpClient: CloseableHttpClient = HttpClientBuilder.create().build()
 
-  def conversions(date: LocalDate): Either[FixerError, Conversions] = {
+  def conversions(date: LocalDate)(implicit ec: ExecutionContext): Future[Either[Error, Conversions]] = {
     val url = constructUrl(date)
-
     val request = new HttpGet(url)
-    val response = Try(httpClient.execute(request))
-
-    response match {
-      case Success(r) => r.getStatusLine.getStatusCode match {
-        case 200 => {
-          val body = scala.io.Source.fromInputStream(r.getEntity.getContent).getLines().mkString("")
-          Json.parse(body).validate[Conversions] match {
-            case JsSuccess(conversion, _) => {
-              println(conversion)
-              Right(conversion)
-            }
-            case JsError(e) => Left(FixerGenericError())
-          }
-        }
-      }
-    }
+    AsyncHttpClient.json[Conversions](request)
   }
 
 }
