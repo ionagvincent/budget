@@ -17,7 +17,7 @@ libraryDependencies ++= Seq(
   "oauth.signpost" % "signpost-commonshttp4" % "1.2.1.2",
   "joda-time" % "joda-time" % "2.9.4",
   "org.scalatestplus.play"   %%  "scalatestplus-play"   % "1.5.1" % Test,
-  "org.scalatest" %% "scalatest" % "2.2.5" % Test,
+  "org.scalatest" %% "scalatest" % "2.2.5" % Test
 )
 
 resolvers += "scalaz-bintray" at "http://dl.bintray.com/scalaz/releases"
