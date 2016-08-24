@@ -20,6 +20,8 @@ class SplitwiseSpec extends FlatSpec with Matchers {
           firstExpense.currency_code shouldBe "GBP"
           firstExpense.creation_method shouldBe Some("split")
           firstExpense.description shouldBe "Book"
+          val secondExpense = expenses.expenses.find(_.id == 117348454).get
+          secondExpense.cost shouldBe 2.1
         }
         case _ => fail("Could not parse JSON for expenses")
       }
