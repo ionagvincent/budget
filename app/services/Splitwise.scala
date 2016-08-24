@@ -48,6 +48,7 @@ object SplitwiseFormats {
                       updated_at: DateTime,
                       deleted_by: Option[UserDetails],
                       category: Category,
+                      payment: Boolean,
                       users: List[User]
                     )
 
@@ -67,6 +68,7 @@ object SplitwiseFormats {
     (__ \ "updated_at").read[DateTime] and
     (__ \ "deleted_by").readNullable[UserDetails] and
     (__ \ "category").read[Category] and
+    (__ \ "payment").read[Boolean] and
     (__ \ "users").read[List[User]]
   )(Expense)
 
@@ -95,6 +97,20 @@ class Splitwise(person: String) {
     consumer.sign(request)
     val response = Try(httpClient.execute(request))
 
+    def owedShare(e: Expense): BigDecimal = e.users.find(_.user_id == userId).flatMap(_.owed_share).getOrElse(0)
+
+    def isValidExpense(e: Expense): Boolean = e.deleted_by.isEmpty && !e.payment && owedShare(e) > 0
+
+    def simplifyExpense(e: Expense): model.Expense = model.Expense(
+      e.id,
+      e.group_id,
+      e.description.trim,
+      owedShare(e),
+      e.currency_code,
+      e.category.name,
+      e.date
+    )
+
     response match {
       case Success(r) => r.getStatusLine.getStatusCode match {
         case 200 => {
@@ -102,12 +118,7 @@ class Splitwise(person: String) {
           (Json.parse(body) \ "expenses").toEither match {
             case Right(json) => json.validate[Seq[Expense]] match {
               case JsSuccess(expenses, _) => {
-                Right(expenses.filter(_.deleted_by.isEmpty).filter(!_.creation_method.contains("debt_consolidation", "payment")).map(
-                  e => {
-                    val owedShare: BigDecimal = e.users.find(_.user_id == userId).flatMap(_.owed_share).getOrElse(0)
-                    model.Expense(e.id, e.group_id, e.description.trim, owedShare, e.currency_code, e.category.name, e.date)
-                  }
-                ))
+                Right(expenses.filter(isValidExpense).map(e => simplifyExpense(e)))
               }
               case JsError(e) => Left(SplitwiseJsonParsingError(e))
             }

@@ -8,3 +8,6 @@ sealed trait SplitwiseError
 case class SplitwiseRequestTransportError(error: String) extends SplitwiseError
 case class SplitwiseRequestError(statusCode: Int) extends SplitwiseError
 case class SplitwiseJsonParsingError(errors: Seq[(JsPath, Seq[ValidationError])]) extends SplitwiseError
+
+sealed trait FixerError
+case class FixerGenericError() extends FixerError

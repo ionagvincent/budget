@@ -2,9 +2,13 @@ package controllers
 
 import javax.inject._
 
+import configuration.Config
 import model.{SplitwiseJsonParsingError, SplitwiseRequestError, SplitwiseRequestTransportError}
+import org.joda.time.LocalDate
+import play.api.libs.json.Json
 import play.api.mvc._
 import services.Splitwise
+import services.Fixer
 
 /**
  * This controller creates an `Action` to handle HTTP requests to the
@@ -13,30 +17,32 @@ import services.Splitwise
 @Singleton
 class HomeController @Inject() extends Controller {
 
-  /**
-   * Create an Action to render an HTML page with a welcome message.
-   * The configuration in the `route
-    * s` file means that this method
-   * will be called when the application receives a `GET` request with
-   * a path of `/`.
-   */
-  def index = Action {
+  import model.Expense.expensesFormat
 
-    val s = new Splitwise("niklas")
+  def index(person: String) = Action {
+
+    val defaultCurrency = Config.Splitwise.People.currency(person)
+
+    val s = new Splitwise(person)
+
+    Fixer.conversions(new LocalDate("2016-08-22")) match {
+      case Right(conversion) => {
+        println(conversion.convert("GBP", "SEK", 10))
+      }
+      case _ =>
+    }
 
     s.expenses match {
       case Right(expenses) => {
-        println(s"Got ${expenses.length} expenses")
-        expenses.foreach(println)
+        val expensesToConvert = expenses.filter(_.currencyCode != defaultCurrency).groupBy(e => e.currencyCode -> e.date.toLocalDate)
+        println(expensesToConvert)
+        println(expensesToConvert.keySet)
+        Ok(Json.toJson(expenses))
       }
       case Left(error) => error match {
-        case e: SplitwiseRequestError => println(e)
-        case e: SplitwiseRequestTransportError => println(e)
-        case e: SplitwiseJsonParsingError => println(e)
+        case _ => InternalServerError("Something went wrong")
       }
     }
-
-    Ok("Hello")
   }
 
 }

@@ -8,6 +8,12 @@ object Config {
 
   val config = ConfigFactory.load()
 
+  object Fixer {
+    private val fixerConfig = config.getConfig("fixer")
+
+    val baseUri = fixerConfig.getString("baseUri")
+  }
+
   object Splitwise {
     private val splitwiseConfig = config.getConfig("splitwise")
 
@@ -27,6 +33,8 @@ object Config {
       def accessSecret(person: String): String = peopleConfig.getString(s"$person.accessSecret")
 
       def userId(person: String): Long = peopleConfig.getLong(s"$person.userId")
+
+      def currency(person: String): String = peopleConfig.getString(s"$person.currency")
     }
   }
 
