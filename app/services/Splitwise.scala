@@ -81,6 +81,8 @@ class Splitwise(person: String) {
 
   import SplitwiseFormats._
 
+  val httpClient = new AsyncHttpClient
+
   val consumer = new CommonsHttpOAuthConsumer(Config.Splitwise.consumerKey, Config.Splitwise.consumerSecret)
   consumer.setTokenWithSecret(Config.Splitwise.People.accessToken(person), Config.Splitwise.People.accessSecret(person))
 
@@ -109,7 +111,7 @@ class Splitwise(person: String) {
     val request = new HttpGet(url)
     consumer.sign(request)
 
-    AsyncHttpClient.json[Expenses](request).map {
+    httpClient.json[Expenses](request).map {
       case Right(e) => Right(e.expenses.filter(isValidExpense).map(e => simplifyExpense(e)))
       case Left(error) => Left(error)
     }

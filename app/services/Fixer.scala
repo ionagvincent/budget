@@ -38,6 +38,8 @@ object Fixer {
 
   import FixerFormats._
 
+  val httpClient = new AsyncHttpClient
+
   def constructUrl(date: LocalDate): String = {
     val dateString = date.toString("YYYY-MM-DD")
     s"${Config.Fixer.baseUri}$dateString"
@@ -46,7 +48,7 @@ object Fixer {
   def conversions(date: LocalDate)(implicit ec: ExecutionContext): Future[Either[Error, Conversions]] = {
     val url = constructUrl(date)
     val request = new HttpGet(url)
-    AsyncHttpClient.json[Conversions](request)
+    httpClient.json[Conversions](request)
   }
 
 }

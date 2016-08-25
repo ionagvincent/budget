@@ -22,7 +22,7 @@ class ScalaFutureCallbackImpl[T] extends FutureCallback[T] {
   def asFuture: Future[T] = promise.future
 }
 
-object AsyncHttpClient {
+class AsyncHttpClient {
 
   val httpClient: CloseableHttpAsyncClient = HttpAsyncClients.createDefault()
   val callback = new ScalaFutureCallbackImpl[HttpResponse]
@@ -38,6 +38,7 @@ object AsyncHttpClient {
       response.getStatusLine.getStatusCode match {
         case 200 => {
           val body = scala.io.Source.fromInputStream(response.getEntity.getContent).getLines().mkString("")
+          httpClient.close()
           Json.parse(body).validate[T] match {
             case JsSuccess(result, _) => Right(result)
             case JsError(e) => Left(JsonParsingError(e))
